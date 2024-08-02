@@ -96,22 +96,20 @@ class CSVDataBase:
         self.path = path
         self._reader = DictReader
         self._writer = DictWriter
-        self.field_names = [
-            "date_time",
-            "name",
-            "amount",
-            "reason",
-            "tag",
-            "flow_type",
-        ]
+        # self.field_names = [
+        #     "date_time",
+        #     "name",
+        #     "amount",
+        #     "reason",
+        #     "tag",
+        #     "flow_type",
+        # ]
 
+        self.field_names: list[str] = list(Entry.model_fields.keys())
         self.logger.info("Initialized CSV DataBase Class")
-        self.logger.debug("-" * 15)
         self.logger.debug("Config:")
         self.logger.debug(f"CSV File Path       : {self.path}")
-        # self.logger.debug(f"CSV Dialect         : {self._reader.dialect}")
         self.logger.debug(f"Allowed Field Names : {self.field_names}")
-        self.logger.debug("-" * 15)
 
     #
     # Internal Functions
@@ -122,16 +120,13 @@ class CSVDataBase:
         """
         Checks if the CSV file path given is a file and if it also exists
         """
-        self.logger.debug("-" * 15)
 
         self.logger.info("Checking for the existence of the file")
         if self.path.is_file() and self.path.exists():
             self.logger.debug("CSV File Exists")
-            self.logger.debug("-" * 15)
             return True
         else:
             self.logger.debug("CSV File Does not Exist")
-            self.logger.debug("-" * 15)
             return False
 
     def read_all(self, *, return_as: type[Entry] = Entry) -> list[Entry] | None:
@@ -145,7 +140,7 @@ class CSVDataBase:
             list[Entry] | None: List of Entry objects read from the CSV file, or None if the file is empty.
         """
         self.logger.info("Reading Data from CSV file")
-        if self.__does_csv_file_exist():
+        if self.__does_csv_file_exist():  # Reads, everything and returns it
             with open(self.path, newline="") as file:
                 data = [Entry(**each) for each in list(self._reader(file))]  # type: ignore
                 self.logger.info(f"Read {len(data)} entries from the CSV file.")
@@ -199,7 +194,7 @@ class CSVDataBase:
             list[Entry] | None: List of Entry objects matching the query condition, or None if no matches.
         """
         self.logger.info(f"Querying entries with condition: {query}")
-        if self.__does_csv_file_exist():
+        try:
             data = self.read_all()
             if data:
                 filtered_data: list[Entry] = []
@@ -216,8 +211,8 @@ class CSVDataBase:
             else:
                 self.logger.info("No data found in the CSV file.")
                 return None
-        else:
-            self.logger.error("CSV file does not exist for querying.")
+        except Exception as err:
+            self.logger.exception(f"{err}: Error Encountered during Update Operation")
             return None
 
     def update(self, condition: UpdateCondition):
@@ -228,8 +223,8 @@ class CSVDataBase:
             condition (UpdateCondition): UpdateCondition object specifying the update condition.
         """
         self.logger.info(f"Updating entries with condition: {condition}")
-        if self.__does_csv_file_exist():
-            data = self.read_all()
+        data = self.read_all()
+        try:
             if data:
                 for each in data:
                     if (
@@ -239,12 +234,15 @@ class CSVDataBase:
                         setattr(each, condition.where, condition.with_new_value)
                 self.write(data)
                 self.logger.info("Update operation completed.")
+                return True
             else:
                 self.logger.info("No data found to update.")
-        else:
-            self.logger.error("CSV file does not exist for updating.")
+                return False
+        except Exception as err:
+            self.logger.exception(f"{err}: Error Encountered during Update Operation")
+            return False
 
-    def delete(self, condition: Query | Entry) -> None:
+    def delete(self, condition: Query | Entry) -> bool:
         """
         Delete entries from the CSV file based on the specified query or entry instance.
 
@@ -279,23 +277,27 @@ class CSVDataBase:
 
                     elif isinstance(condition, Entry):
                         # Check if the entry matches and skip writing this row if it matches the condition
-                        if entry == condition:
+                        if entry.id == condition.id:  # Compare by ID for exact match
                             deleted_count += 1
                             continue
-
                     # Write the row to the temp file if it doesn't match the delete condition
                     writer.writerow(row)
 
             # Replace the original file with the temp file after successful deletion
             temp_file.replace(self.path)
             self.logger.info(f"Deleted {deleted_count} entries from the CSV file.")
+            return True
         else:
             self.logger.error("CSV file does not exist for deleting.")
+            return False
 
 
 if __name__ == "__main__":
     from time import perf_counter
     from rich import print
+    from rich.traceback import install
+
+    install(show_locals=True)
 
     # Create some dummy entries
     dummy = Entry(name="Usr", amount=Decimal(123123123), reason="JFF")
@@ -306,7 +308,7 @@ if __name__ == "__main__":
         name="Spcl", amount=Decimal(123123123), reason="JFF", flow_type=FlowType.SAVINGS
     )
 
-    size = 10_000  # Example size of entries, which at 10 entries/day won't get to this much size
+    size = 1_000_000  # Example size of entries, which at 10 entries/day won't get to this much size
     db = CSVDataBase(Path("test-db.csv"))
 
     # Measure write performance
@@ -317,6 +319,7 @@ if __name__ == "__main__":
     # Measure read performance
     read_st = perf_counter()
     read_data = db.read_all()
+    print(read_data)
     print(f"Read {len(read_data)} number of datum.")  # type: ignore
     read_stp = perf_counter()
 
