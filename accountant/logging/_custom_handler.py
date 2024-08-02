@@ -54,7 +54,7 @@ def RichConsoleHandler(level: int | str = logging.NOTSET) -> RichHandler:
         level=level,
         console=Console(file=None),
         rich_tracebacks=True,
-        log_time_format="[%I:%M:%S %p %d/%m/%Y]",
+        log_time_format="[%d/%m/%Y %I:%M:%S.%f %p]",
     )
 
 
@@ -76,7 +76,7 @@ def RichFileHandler(
         level=level,
         console=file_console,
         rich_tracebacks=True,
-        log_time_format="[%I:%M:%S %p %d/%m/%Y]",
+        log_time_format="[%d/%m/%Y %I:%M:%S.%f %p]",
         show_time=True,
         omit_repeated_times=False,
     )
